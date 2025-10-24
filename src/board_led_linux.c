@@ -74,7 +74,7 @@ void BoardLed_Set(uint8_t on)
     gpiod_line_set_value_bulk(&s_bulk, vals);
 }
 
-/* API mới: ghi theo mặt nạ 8-bit */
+/* API ghi theo mặt nạ 8-bit */
 void BoardLed_WriteMask(uint8_t mask)
 {
     if (!s_chip) return;
@@ -88,7 +88,7 @@ void BoardLed_WriteMask(uint8_t mask)
         if (s_lines[i]) gpiod_line_set_value(s_lines[i], vals[i]);
 }
 
-/* API mới: ghi một LED theo chỉ số */
+/* API ghi một LED theo chỉ số */
 void BoardLed_WriteOne(unsigned index, uint8_t on)
 {
     if (!s_chip || index >= s_count) return;
