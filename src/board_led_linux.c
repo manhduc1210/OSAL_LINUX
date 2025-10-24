@@ -16,9 +16,10 @@ typedef struct {
     unsigned    count;       // số LED, mặc định 8
 } OSAL_GpiodCtx;
 
-static struct gpiod_chip*      s_chip  = NULL;
-static struct gpiod_line_bulk  s_bulk;
-static unsigned                 s_count = 0;
+static struct gpiod_chip*     s_chip  = NULL;
+static struct gpiod_line_bulk s_bulk;
+static struct gpiod_line*     s_lines[OSAL_GPIOD_MAX]; /* truy cập từng line nhanh */
+static unsigned               s_count = 0;
 
 static int _ints_all(int *dst, int v, unsigned n){
     for (unsigned i=0;i<n;i++) dst[i]=v;
@@ -67,3 +68,33 @@ void BoardLed_Set(uint8_t on)
     for (unsigned i=0;i<s_count;i++) vals[i] = on ? 1 : 0;
     gpiod_line_set_value_bulk(&s_bulk, vals);
 }
+
+/* API mới: ghi theo mặt nạ 8-bit */
+void BoardLed_WriteMask(uint8_t mask)
+{
+    if (!s_chip) return;
+    int vals[OSAL_GPIOD_MAX];
+    _fill_vals_from_mask(vals, mask, s_count);
+
+    if (gpiod_line_set_value_bulk(&s_bulk, vals) == 0) return;
+
+    /* fallback từng line */
+    for (unsigned i = 0; i < s_count; ++i)
+        if (s_lines[i]) gpiod_line_set_value(s_lines[i], vals[i]);
+}
+
+/* API mới: ghi một LED theo chỉ số */
+void BoardLed_WriteOne(unsigned index, uint8_t on)
+{
+    if (!s_chip || index >= s_count) return;
+    if (s_lines[index])
+        gpiod_line_set_value(s_lines[index], on ? 1 : 0);
+}
+
+/*
+BoardLed_Set(1);  // all ON
+// ví dụ: chỉ bật LED0, LED3, LED7
+BoardLed_WriteMask( (1u<<0) | (1u<<3) | (1u<<7) );
+BoardLed_WriteOne(3, 1);  // bật LED3
+BoardLed_WriteOne(3, 0);  // tắt LED3
+*/
