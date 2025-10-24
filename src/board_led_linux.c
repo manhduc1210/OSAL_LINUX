@@ -26,6 +26,10 @@ static int _ints_all(int *dst, int v, unsigned n){
     return 0;
 }
 
+static void _fill_vals_from_mask(int* vals, uint8_t mask, unsigned n) {
+    for (unsigned i = 0; i < n; ++i) vals[i] = (mask >> i) & 0x1;
+}
+
 void BoardLed_Init(void)
 {
     OSAL_GpiodCtx* ctx = (OSAL_GpiodCtx*)g_osal.cfg.platform_ctx;
@@ -49,6 +53,7 @@ void BoardLed_Init(void)
     //     return;
     // }
     gpiod_line_bulk_init(&s_bulk);
+
     if (gpiod_chip_get_lines(s_chip, offs, s_count, &s_bulk) != 0) {
         OSAL_LOG("[LED][GPIOD] get lines failed (base=%u, count=%u)\r\n", line_base, s_count);
         return;
