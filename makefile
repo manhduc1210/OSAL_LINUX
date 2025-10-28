@@ -2,12 +2,12 @@
 # Makefile — OSAL Linux + libgpiod (cross via SDK)
 # ============================
 
-# CC đến từ SDK sau khi source environment-setup-*
+# CC đến từ SDK (sau khi source environment-setup-*)
 CC ?= $(CROSS_COMPILE)gcc
 
 # Dirs
-SRC_DIR  := src
-INC_DIR  := include
+SRC_DIRS := src hal/src osal/src
+INC_DIRS := include hal/include osal/include hw/include
 OBJ_DIR  := out
 TARGET   := osal_demo
 
@@ -15,7 +15,6 @@ TARGET   := osal_demo
 GPIOD_CFLAGS := $(shell pkg-config --cflags gpiod 2>/dev/null)
 GPIOD_LIBS   := $(shell pkg-config --libs   gpiod 2>/dev/null)
 ifeq ($(strip $(GPIOD_LIBS)),)
-  # fallback: dùng sysroot từ SDK nếu có
   ifneq ($(strip $(SDKTARGETSYSROOT)),)
     GPIOD_CFLAGS += -I$(SDKTARGETSYSROOT)/usr/include
     GPIOD_LIBS   += -L$(SDKTARGETSYSROOT)/usr/lib -lgpiod
@@ -25,8 +24,9 @@ ifeq ($(strip $(GPIOD_LIBS)),)
 endif
 
 # Flags
+INC_FLAGS := $(addprefix -I,$(INC_DIRS))
 CFLAGS  ?= -O2
-CFLAGS  += -Wall -pthread -I$(INC_DIR) $(GPIOD_CFLAGS)
+CFLAGS  += -Wall -pthread $(INC_FLAGS) $(GPIOD_CFLAGS)
 LDFLAGS ?=
 LDFLAGS += -pthread $(GPIOD_LIBS)
 
@@ -35,9 +35,11 @@ ifeq ($(DEBUG),1)
   CFLAGS += -g -DDEBUG
 endif
 
-# Sources
-SRCS := $(wildcard $(SRC_DIR)/*.c)
-OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
+# Sources & Objects
+SRCS := $(foreach d,$(SRC_DIRS),$(wildcard $(d)/*.c))
+# Ví dụ: src/app_linux.c  -> out/src/app_linux.o
+#        osal/src/osal.c  -> out/osal/src/osal.o
+OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 
 # Default
 all: $(TARGET)
@@ -47,14 +49,11 @@ $(TARGET): $(OBJS)
 	@echo "🔗 Linking $@ ..."
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
 
-# Compile
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+# Compile (tự tạo thư mục out/ tương ứng)
+$(OBJ_DIR)/%.o: %.c
 	@echo "🧩 Compiling $< ..."
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-# Ensure out dir
-$(OBJ_DIR):
-	mkdir -p $(OBJ_DIR)
 
 # Utilities
 clean:
@@ -66,3 +65,4 @@ run: $(TARGET)
 	./$(TARGET)
 
 .PHONY: all clean run
+
