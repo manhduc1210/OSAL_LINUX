@@ -58,7 +58,8 @@ void BoardLed_Init(void)
         OSAL_LOG("[LED][GPIOD] get lines failed (base=%u, count=%u)\r\n", line_base, s_count);
         return;
     }
-    int zeros[OSAL_GPIOD_MAX]; _ints_all(zeros, 0, s_count);
+    int zeros[OSAL_GPIOD_MAX]; 
+    _ints_all(zeros, 0, s_count);
     if (gpiod_line_request_bulk_output(&s_bulk, "osal_led", zeros) != 0) {
         OSAL_LOG("[LED][GPIOD] request output failed\r\n");
         return;
