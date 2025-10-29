@@ -9,28 +9,37 @@
 #include "osal.h"
 #include "osal_task.h"
 #include <stdio.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <stdarg.h>
 
 // === Forward declarations for demos ===
 void DemoUart_Start(const char* dev, uint32_t baud, int nb);  // from demo_uart.c
+void DemoUart_Stop(void);                                     // stop/cleanup
+
+// === SIGINT handler (Ctrl+C) ===
+static volatile sig_atomic_t g_stop_requested = 0;
+static void on_sigint(int sig) { 
+    (void)sig; 
+    g_stop_requested = 1; 
+}
 
 int main(void) {
-    printf("=== OSAL Linux Demo App ===\r\n");
+    printf("=== OSAL Linux Demo App (Ctrl+C to exit) ===\n");
 
-    // 1. Configure OSAL for Linux backend
+    // Install Ctrl+C handler
+    signal(SIGINT, on_sigint);
+
+    // 1) OSAL init
     OSAL_Config cfg = {
         .backend = OSAL_BACKEND_LINUX,
         .log     = printf,
         .platform_ctx = NULL
     };
-
     if (OSAL_Init(&cfg) != OSAL_OK) {
-        printf("[ERROR] OSAL_Init failed!\r\n");
+        printf("[ERROR] OSAL_Init failed!\n");
         return -1;
     }
-
-    // 2. Start LED demo (optional)
-    // Uncomment if you want to see LED blinking as well
-    // DemoBlink_Start();
 
     // 3. Start UART HAL demo
     //    - Device: "/dev/ttyPS1" (ZedBoard's second UART port)
@@ -40,9 +49,13 @@ int main(void) {
 
     // 4. Let OSAL tasks run indefinitely
     //    In Linux backend, tasks are POSIX threads. We can just sleep forever.
-    for (;;) {
-        OSAL_TaskDelayMs(5000);
+    while (!g_stop_requested) {
+        OSAL_TaskDelayMs(200);
     }
+
+    printf("\n[APP] Ctrl+C detected. Stopping...\n");
+    // DemoUart_Stop();
+    printf("[APP] Exit.\n");
 
     return 0;
 }
