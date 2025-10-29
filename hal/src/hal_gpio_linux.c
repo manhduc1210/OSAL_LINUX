@@ -1,133 +1,232 @@
 /**
  * @file hal_gpio_linux.c
- * @brief Linux backend for HAL GPIO (libgpiod).
+ * @brief Linux backend for HAL GPIO using libgpiod v1.x
+ *
+ * Build: link with -lgpiod
  */
+
 #include "hal_gpio.h"
 #include "osal.h"
 
 #include <gpiod.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
-struct HAL_Gpio {
+struct HAL_GpioChip {
     struct gpiod_chip* chip;
-
-    // LEDs
-    struct gpiod_line_bulk led_bulk;
-    unsigned               led_count;
-    int                    led_offsets[8];
-    int                    leds_active_low;
-
-    // Buttons
-    struct gpiod_line_bulk btn_bulk;
-    unsigned               btn_count;
-    int                    btn_offsets[2];
-    int                    btns_active_low;
+    char name[64];
 };
 
-static int _req_leds(struct HAL_Gpio* h, const HAL_GpioConfig* c) {
-    h->led_count = c->led_count;
-    if (h->led_count == 0 || h->led_count > 8) return -1;
+typedef struct {
+    uint32_t debounce_ms;
+    uint64_t last_evt_ns;
+} _HalDebounce;
 
-    for (unsigned i = 0; i < h->led_count; ++i)
-        h->led_offsets[i] = c->led_base + (int)i;
+struct HAL_GpioLine {
+    HAL_GpioChip*        hchip;
+    struct gpiod_line*   line;
+    HAL_GpioLineConfig   cfg;
+    int                  have_event;    /* 1 if requested with events */
+    _HalDebounce         db;
+};
 
-    if (gpiod_chip_get_lines(h->chip, h->led_offsets, h->led_count, &h->led_bulk) < 0)
-        return -2;
+/* --- helpers --- */
 
-    // Request as outputs, initial 0
-    int init_vals[8] = {0};
-    if (gpiod_line_request_bulk_output(&h->led_bulk, "hal_leds", init_vals) < 0)
-        return -3;
-
-    h->leds_active_low = c->leds_active_low ? 1 : 0;
-    return 0;
+static uint64_t _timespec_to_ns(const struct timespec* ts) {
+    if (!ts) return 0;
+    return ((uint64_t)ts->tv_sec * 1000000000ull) + (uint64_t)ts->tv_nsec;
 }
 
-static int _req_btns(struct HAL_Gpio* h, const HAL_GpioConfig* c) {
-    h->btn_count = 2;
-    h->btn_offsets[0] = c->btn0_offset;
-    h->btn_offsets[1] = c->btn1_offset;
-
-    if (gpiod_chip_get_lines(h->chip, h->btn_offsets, h->btn_count, &h->btn_bulk) < 0)
-        return -2;
-
-    if (gpiod_line_request_bulk_input(&h->btn_bulk, "hal_btns") < 0)
-        return -3;
-
-    h->btns_active_low = c->btns_active_low ? 1 : 0;
-    return 0;
+/* Map logical value to physical considering active low/high */
+static int _logical_to_physical(const HAL_GpioLineConfig* c, int logical) {
+    return (c->active == HAL_GPIO_ACTIVE_LOW) ? (!logical) : (logical != 0);
 }
 
-HAL_Gpio* HAL_Gpio_Open(const HAL_GpioConfig* cfg, HAL_GpioStatus* out_st) {
-    if (!cfg || !cfg->chip_name) {
-        if (out_st) *out_st = HAL_GPIO_EINVAL;
-        return NULL;
-    }
-
-    struct HAL_Gpio* h = (struct HAL_Gpio*)calloc(1, sizeof(*h));
-    // OSAL_LOG("h : %s \r\n", h);
-    if (!h) { 
-        if (out_st) *out_st = HAL_GPIO_EIO; 
-        return NULL; 
-    }
-
-    // OSAL_LOG("chip_name : %s \r\n", cfg->chip_name);
-
-    h->chip = gpiod_chip_open_by_name(cfg->chip_name);
-    if (!h->chip) {
-        OSAL_LOG("[GPIO][LINUX] open chip %s failed\r\n", cfg->chip_name);
-        if (out_st) *out_st = HAL_GPIO_EIO; 
-        free(h); 
-        return NULL;
-    }
-
-    if (_req_leds(h, cfg) != 0 || _req_btns(h, cfg) != 0) {
-        if (out_st) *out_st = HAL_GPIO_ECFG;
-        gpiod_chip_close(h->chip); 
-        free(h);
-        return NULL;
-    }
-
-    if (out_st) *out_st = HAL_GPIO_OK;
-    OSAL_LOG("[GPIO][LINUX] chip=%s leds[%u] base=%d btns=(%d,%d)\r\n",
-             cfg->chip_name, (unsigned)cfg->led_count, cfg->led_base,
-             cfg->btn0_offset, cfg->btn1_offset);
-    return h;
+/* Map physical read to logical */
+static int _physical_to_logical(const HAL_GpioLineConfig* c, int physical) {
+    int v = physical ? 1 : 0;
+    return (c->active == HAL_GPIO_ACTIVE_LOW) ? !v : v;
 }
 
-void HAL_Gpio_Close(HAL_Gpio* h) {
-    if (!h) return;
-    gpiod_line_release_bulk(&h->led_bulk);
-    gpiod_line_release_bulk(&h->btn_bulk);
-    if (h->chip) gpiod_chip_close(h->chip);
-    free(h);
+/* Resolve by name if provided (libgpiod v1: iterate) */
+static int _resolve_offset_by_name(struct gpiod_chip* chip, const char* name) {
+    if (!name || !*name) return -1;
+    int num = gpiod_chip_num_lines(chip);
+    for (int off = 0; off < num; ++off) {
+        struct gpiod_line* ln = gpiod_chip_get_line(chip, off);
+        if (!ln) continue;
+        const char* ln_name = gpiod_line_name(ln);
+        if (ln_name && strcmp(ln_name, name) == 0) {
+            gpiod_line_release(ln); /* release temp ref */
+            return off;
+        }
+        gpiod_line_release(ln);
+    }
+    return -1;
 }
 
-HAL_GpioStatus HAL_Gpio_WriteLeds(HAL_Gpio* h, uint8_t value) {
-    if (!h) return HAL_GPIO_EINVAL;
+/* --- API impl --- */
 
-    int vals[8];
-    for (unsigned i = 0; i < h->led_count; ++i) {
-        int bit = (value >> i) & 1;
-        vals[i] = h->leds_active_low ? !bit : bit;
+HAL_GpioStatus HAL_GpioChip_Open(const HAL_GpioChipConfig* cfg, HAL_GpioChip** out_chip) {
+    if (!cfg || !cfg->chip_name || !cfg->chip_name[0] || !out_chip) {
+        OSAL_LOG("[GPIO][LINUX] invalid chip config (name missing)\r\n");
+        return HAL_GPIO_EINVAL;
     }
-    if (gpiod_line_set_value_bulk(&h->led_bulk, vals) < 0)
+    HAL_GpioChip* hc = (HAL_GpioChip*)calloc(1, sizeof(*hc));
+    if (!hc) return HAL_GPIO_EIO;
+
+    hc->chip = gpiod_chip_open_by_name(cfg->chip_name);
+    if (!hc->chip) {
+        OSAL_LOG("[GPIO][LINUX] gpiod_chip_open_by_name('%s') failed\r\n", cfg->chip_name);
+        free(hc);
         return HAL_GPIO_EIO;
+    }
+    strncpy(hc->name, cfg->chip_name, sizeof(hc->name)-1);
+    OSAL_LOG("[GPIO][LINUX] chip opened: %s\r\n", hc->name);
+    *out_chip = hc;
     return HAL_GPIO_OK;
 }
 
-HAL_GpioStatus HAL_Gpio_ReadBtns(HAL_Gpio* h, uint8_t* out_bits) {
-    if (!h || !out_bits) return HAL_GPIO_EINVAL;
-    int vals[2] = {0,0};
-    if (gpiod_line_get_value_bulk(&h->btn_bulk, vals) < 0)
+void HAL_GpioChip_Close(HAL_GpioChip* chip) {
+    if (!chip) return;
+    if (chip->chip) gpiod_chip_close(chip->chip);
+    free(chip);
+}
+
+HAL_GpioStatus HAL_GpioLine_Request(HAL_GpioChip* chip, const HAL_GpioLineConfig* cfg, HAL_GpioLine** out_line) {
+    if (!chip || !chip->chip || !cfg || !out_line) return HAL_GPIO_EINVAL;
+
+    int offset = cfg->offset;
+    if (offset < 0 && cfg->name) {
+        offset = _resolve_offset_by_name(chip->chip, cfg->name);
+        if (offset < 0) {
+            OSAL_LOG("[GPIO][LINUX] line '%s' not found on %s\r\n", cfg->name, chip->name);
+            return HAL_GPIO_ENOENT;
+        }
+    }
+    if (offset < 0) return HAL_GPIO_EINVAL;
+
+    struct gpiod_line* ln = gpiod_chip_get_line(chip->chip, offset);
+    if (!ln) return HAL_GPIO_EIO;
+
+    /* Request */
+    int rc = 0;
+    if (cfg->dir == HAL_GPIO_DIR_OUT) {
+        int phys_init = _logical_to_physical(cfg, cfg->initial);
+        rc = gpiod_line_request_output(ln, "hal_gpio", phys_init);
+    } else {
+        if (cfg->edge == HAL_GPIO_EDGE_NONE) {
+            rc = gpiod_line_request_input(ln, "hal_gpio");
+        } else if (cfg->edge == HAL_GPIO_EDGE_RISING) {
+            rc = gpiod_line_request_rising_edge_events(ln, "hal_gpio");
+        } else if (cfg->edge == HAL_GPIO_EDGE_FALLING) {
+            rc = gpiod_line_request_falling_edge_events(ln, "hal_gpio");
+        } else {
+            rc = gpiod_line_request_both_edges_events(ln, "hal_gpio");
+        }
+    }
+    if (rc < 0) {
+        gpiod_line_release(ln);
         return HAL_GPIO_EIO;
+    }
 
-    // Normalize to "pressed=1"
-    uint8_t b0 = (uint8_t)(vals[0] ? 1 : 0);
-    uint8_t b1 = (uint8_t)(vals[1] ? 1 : 0);
-    if (h->btns_active_low) { b0 = !b0; b1 = !b1; }
+    HAL_GpioLine* h = (HAL_GpioLine*)calloc(1, sizeof(*h));
+    if (!h) { gpiod_line_release(ln); return HAL_GPIO_EIO; }
+    h->hchip      = chip;
+    h->line       = ln;
+    h->cfg        = *cfg;
+    h->have_event = (cfg->dir == HAL_GPIO_DIR_IN && cfg->edge != HAL_GPIO_EDGE_NONE) ? 1 : 0;
+    h->db.debounce_ms = cfg->debounce_ms;
+    h->db.last_evt_ns = 0;
 
-    *out_bits = (uint8_t)((b0 ? 1 : 0) | (b1 ? 2 : 0));
+    *out_line = h;
+    return HAL_GPIO_OK;
+}
+
+void HAL_GpioLine_Release(HAL_GpioLine* line) {
+    if (!line) return;
+    if (line->line) gpiod_line_release(line->line);
+    free(line);
+}
+
+HAL_GpioStatus HAL_GpioLine_Write(HAL_GpioLine* line, int value) {
+    if (!line || !line->line) return HAL_GPIO_EINVAL;
+    if (line->cfg.dir != HAL_GPIO_DIR_OUT) return HAL_GPIO_EINVAL;
+    int phys = _logical_to_physical(&line->cfg, value);
+    return (gpiod_line_set_value(line->line, phys) < 0) ? HAL_GPIO_EIO : HAL_GPIO_OK;
+}
+
+HAL_GpioStatus HAL_GpioLine_Toggle(HAL_GpioLine* line) {
+    if (!line || !line->line) return HAL_GPIO_EINVAL;
+    int phys = gpiod_line_get_value(line->line);
+    if (phys < 0) return HAL_GPIO_EIO;
+    int logi = _physical_to_logical(&line->cfg, phys);
+    return HAL_GpioLine_Write(line, !logi);
+}
+
+HAL_GpioStatus HAL_GpioLine_Read(HAL_GpioLine* line, int* out) {
+    if (!line || !line->line || !out) return HAL_GPIO_EINVAL;
+    int phys = gpiod_line_get_value(line->line);
+    if (phys < 0) return HAL_GPIO_EIO;
+    *out = _physical_to_logical(&line->cfg, phys);
+    return HAL_GPIO_OK;
+}
+
+HAL_GpioStatus HAL_GpioLine_WaitEvent(HAL_GpioLine* line, int timeout_ms, HAL_GpioEvent* out_ev) {
+    if (!line || !line->line) return HAL_GPIO_EINVAL;
+    if (!line->have_event)    return HAL_GPIO_ENOSUP;
+
+    struct timespec ts = {0,0};
+    int rc = gpiod_line_event_wait(line->line,
+                                   (timeout_ms < 0) ? NULL :
+                                   (&(struct timespec){ .tv_sec = timeout_ms/1000, .tv_nsec = (timeout_ms%1000)*1000000 }));
+    if (rc < 0) return HAL_GPIO_EIO;        /* error */
+    if (rc == 0) return HAL_GPIO_ENOENT;    /* timeout */
+
+    struct gpiod_line_event ev;
+    if (gpiod_line_event_read(line->line, &ev) < 0) return HAL_GPIO_EIO;
+
+    uint64_t t_ns = _timespec_to_ns(&ev.ts);
+    /* Soft debounce */
+    if (line->db.debounce_ms > 0 && line->db.last_evt_ns != 0) {
+        uint64_t dt = (t_ns > line->db.last_evt_ns) ? (t_ns - line->db.last_evt_ns) : 0;
+        if (dt < (uint64_t)line->db.debounce_ms * 1000000ull) {
+            /* Drop event */
+            return HAL_GPIO_ENOENT;
+        }
+    }
+    line->db.last_evt_ns = t_ns;
+
+    HAL_GpioEdge ed = HAL_GPIO_EDGE_NONE;
+    if (ev.event_type == GPIOD_LINE_EVENT_RISING_EDGE)  ed = HAL_GPIO_EDGE_RISING;
+    if (ev.event_type == GPIOD_LINE_EVENT_FALLING_EDGE) ed = HAL_GPIO_EDGE_FALLING;
+    if (out_ev) {
+        out_ev->timestamp_ns = t_ns;
+        out_ev->edge         = ed;
+    }
+    return HAL_GPIO_OK;
+}
+
+/* --- Group helpers (simple loops; no libgpiod bulk dependency) --- */
+HAL_GpioStatus HAL_GpioGroup_WriteMask(HAL_GpioGroup* grp, uint32_t mask, uint32_t value) {
+    if (!grp || !grp->lines) return HAL_GPIO_EINVAL;
+    for (size_t i = 0; i < grp->count; ++i) {
+        if (mask & (1u << i)) {
+            int bit = (value >> i) & 1u;
+            HAL_GpioLine_Write(grp->lines[i], bit);
+        }
+    }
+    return HAL_GPIO_OK;
+}
+
+HAL_GpioStatus HAL_GpioGroup_ReadBitmap(HAL_GpioGroup* grp, uint32_t* out_bitmap) {
+    if (!grp || !grp->lines || !out_bitmap) return HAL_GPIO_EINVAL;
+    uint32_t bm = 0;
+    for (size_t i = 0; i < grp->count; ++i) {
+        int v=0;
+        if (HAL_GpioLine_Read(grp->lines[i], &v) == HAL_GPIO_OK && v) bm |= (1u << i);
+    }
+    *out_bitmap = bm;
     return HAL_GPIO_OK;
 }

@@ -1,15 +1,14 @@
 /**
  * @file hal_gpio.h
- * @brief Portable GPIO HAL (OS-agnostic). Linux backend uses libgpiod.
+ * @brief General-purpose GPIO HAL (portable header, OS-agnostic).
  *
- * This HAL focuses on:
- *  - Requesting LED output lines in bulk and writing an 8-bit value
- *  - Requesting button input lines in bulk and reading their states
- *
- * Extend as needed (edge events/callbacks) while keeping this API.
+ * Notes:
+ *  - Public API is OS-neutral. Linux backend uses libgpiod v1.x, but this
+ *    header does not mention libgpiod to keep portability.
+ *  - Model: Chip → Lines (single) and optional Groups (convenience).
  */
+
 #pragma once
-#include "osal_types.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -17,36 +16,66 @@
 extern "C" {
 #endif
 
-typedef struct HAL_Gpio HAL_Gpio;
+typedef struct HAL_GpioChip HAL_GpioChip;
+typedef struct HAL_GpioLine HAL_GpioLine;
 
 typedef enum {
     HAL_GPIO_OK = 0,
     HAL_GPIO_EINVAL,
     HAL_GPIO_EIO,
-    HAL_GPIO_ECFG
+    HAL_GPIO_ENOSUP,
+    HAL_GPIO_ENOENT
 } HAL_GpioStatus;
 
+typedef enum { HAL_GPIO_DIR_IN = 0, HAL_GPIO_DIR_OUT = 1 } HAL_GpioDir;
+typedef enum { HAL_GPIO_ACTIVE_HIGH = 0, HAL_GPIO_ACTIVE_LOW = 1 } HAL_GpioActive;
+typedef enum { HAL_GPIO_DRIVE_PUSHPULL = 0, HAL_GPIO_DRIVE_OPENDRAIN, HAL_GPIO_DRIVE_OPENSOURCE } HAL_GpioDrive;
+typedef enum { HAL_GPIO_BIAS_AS_IS = 0, HAL_GPIO_BIAS_PULL_UP, HAL_GPIO_BIAS_PULL_DOWN, HAL_GPIO_BIAS_DISABLE } HAL_GpioBias;
+typedef enum { HAL_GPIO_EDGE_NONE = 0, HAL_GPIO_EDGE_RISING, HAL_GPIO_EDGE_FALLING, HAL_GPIO_EDGE_BOTH } HAL_GpioEdge;
+
 typedef struct {
-    const char* chip_name;     ///< e.g. "gpiochip0"
-    int         led_base;      ///< first LED line offset (contiguous)
-    uint8_t     led_count;     ///< number of LED lines (max 8 used by demo)
-    int         btn0_offset;   ///< button 0 line
-    int         btn1_offset;   ///< button 1 line
-    uint8_t     leds_active_low; ///< 1 if LEDs are wired active-low
-    uint8_t     btns_active_low; ///< 1 if buttons are wired active-low (pressed=0)
-} HAL_GpioConfig;
+    const char* chip_name;           ///< e.g. "gpiochip0"
+} HAL_GpioChipConfig;
 
-/** Open GPIO HAL and request lines. Returns NULL on failure. */
-HAL_Gpio* HAL_Gpio_Open(const HAL_GpioConfig* cfg, HAL_GpioStatus* out_st);
+/** Single line configuration (offset or name identifies a line). */
+typedef struct {
+    int         offset;              ///< use >=0 if known; otherwise -1 and set name
+    const char* name;                ///< optional line label (Linux); can be NULL
+    HAL_GpioDir    dir;
+    HAL_GpioActive active;
+    HAL_GpioDrive  drive;            ///< may be ignored if backend doesn't support
+    HAL_GpioBias   bias;             ///< may be ignored if backend doesn't support
+    int            initial;          ///< initial output value (0/1) when dir=OUT
+    HAL_GpioEdge   edge;             ///< when dir=IN, request edge events if != NONE
+    uint32_t       debounce_ms;      ///< soft debounce in HAL (0 = disabled)
+} HAL_GpioLineConfig;
 
-/** Release lines and free handle. */
-void HAL_Gpio_Close(HAL_Gpio* h);
+/* Chip lifetime */
+HAL_GpioStatus HAL_GpioChip_Open (const HAL_GpioChipConfig* cfg, HAL_GpioChip** out_chip);
+void           HAL_GpioChip_Close(HAL_GpioChip* chip);
 
-/** Write lower 8 bits to LED bank (applies active-low mapping internally). */
-HAL_GpioStatus HAL_Gpio_WriteLeds(HAL_Gpio* h, uint8_t value);
+/* Line lifetime */
+HAL_GpioStatus HAL_GpioLine_Request (HAL_GpioChip* chip, const HAL_GpioLineConfig* cfg, HAL_GpioLine** out_line);
+void           HAL_GpioLine_Release(HAL_GpioLine* line);
 
-/** Read BTN0/BTN1 (bit0=BTN0, bit1=BTN1). Returned logic is "pressed=1". */
-HAL_GpioStatus HAL_Gpio_ReadBtns(HAL_Gpio* h, uint8_t* out_bits);
+/* Basic I/O */
+HAL_GpioStatus HAL_GpioLine_Write (HAL_GpioLine* line, int value); /* logical value (active-aware) */
+HAL_GpioStatus HAL_GpioLine_Toggle(HAL_GpioLine* line);
+HAL_GpioStatus HAL_GpioLine_Read  (HAL_GpioLine* line, int* out_value); /* logical (pressed/high=1) */
+
+/* Event wait (for inputs requested with edge != NONE). timeout_ms: -1=forever, 0=non-blocking */
+typedef struct {
+    uint64_t     timestamp_ns;  ///< 0 if not provided by backend
+    HAL_GpioEdge edge;          ///< which edge fired
+} HAL_GpioEvent;
+
+HAL_GpioStatus HAL_GpioLine_WaitEvent(HAL_GpioLine* line, int timeout_ms, HAL_GpioEvent* out_ev);
+
+/* Convenience: Groups (array of lines) */
+typedef struct { HAL_GpioLine** lines; size_t count; } HAL_GpioGroup;
+
+HAL_GpioStatus HAL_GpioGroup_WriteMask (HAL_GpioGroup* grp, uint32_t mask, uint32_t value);
+HAL_GpioStatus HAL_GpioGroup_ReadBitmap(HAL_GpioGroup* grp, uint32_t* out_bitmap);
 
 #ifdef __cplusplus
 }
