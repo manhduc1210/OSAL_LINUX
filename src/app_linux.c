@@ -12,10 +12,12 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include "hal_gpio.h"
 
 // === Forward declarations for demos ===
 void DemoUart_Start(const char* dev, uint32_t baud, int nb);  // from demo_uart.c
 void DemoUart_Stop(void);                                     // stop/cleanup
+void DemoGpio_Start(const void* cfg_void);
 
 // === SIGINT handler (Ctrl+C) ===
 static volatile sig_atomic_t g_stop_requested = 0;
@@ -28,7 +30,7 @@ int main(void) {
     printf("=== OSAL Linux Demo App (Ctrl+C to exit) ===\n");
 
     // Install Ctrl+C handler
-    signal(SIGINT, on_sigint);
+    // signal(SIGINT, on_sigint);
 
     // 1) OSAL init
     OSAL_Config cfg = {
@@ -45,7 +47,18 @@ int main(void) {
     //    - Device: "/dev/ttyPS1" (ZedBoard's second UART port)
     //    - Baud:   115200
     //    - Non-blocking open: 0 (blocking)
-    DemoUart_Start("/dev/ttyPS0", 115200, 0);
+    // DemoUart_Start("/dev/ttyPS0", 115200, 0);
+
+    HAL_GpioConfig gpio_cfg = {
+        .chip_name = "gpiochip0",
+        .led_base = 0,
+        .led_count = 8,
+        .btn0_offset = 8,
+        .btn1_offset = 9,
+        .leds_active_low = 0,
+        .btns_active_low = 1
+    };
+    DemoGpio_Start(&gpio_cfg);
 
     // 4. Let OSAL tasks run indefinitely
     //    In Linux backend, tasks are POSIX threads. We can just sleep forever.
