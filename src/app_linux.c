@@ -13,11 +13,13 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include "demo_gpio_hal.h"
+#include "hal_i2c.h"
 
 // === Forward declarations for demos ===
 void DemoUart_Start(const char* dev, uint32_t baud, int nb);  // from demo_uart.c
 void DemoUart_Stop(void);                                     // stop/cleanup
 void DemoGpio_Start(const DemoGpioCfg* cfg);
+void DemoI2cExpander_Start(HAL_I2cBus* bus, uint8_t addr7);
 
 // === SIGINT handler (Ctrl+C) ===
 static volatile sig_atomic_t g_stop_requested = 0;
@@ -62,7 +64,20 @@ int main(void) {
     // };
     // DemoGpio_Start(&gpio_cfg);
 
-    DemoI2cTemp_Start("/dev/i2c-0");
+    HAL_I2cStatus st;
+    HAL_I2cBusConfig bus_cfg = { 
+        .bus_name = "/dev/i2c-0", 
+        .bus_speed_hz = 100000 
+    };
+    HAL_I2cBus* bus = HAL_I2cBus_Open(&bus_cfg, &st);
+
+    if (!bus || st != HAL_I2C_OK) {
+        printf("I2C open failed (%d)\n", st);
+        return -1;
+    }
+
+    DemoI2cExpander_Start(bus, 0x20);  // typical MCP23008 addr
+    // DemoI2cTemp_Start("/dev/i2c-0");
 
     // 4. Let OSAL tasks run indefinitely
     //    In Linux backend, tasks are POSIX threads. We can just sleep forever.
