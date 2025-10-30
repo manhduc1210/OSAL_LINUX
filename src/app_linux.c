@@ -50,17 +50,19 @@ int main(void) {
     // DemoUart_Start("/dev/ttyPS0", 115200, 0);
 
     // TODO: Fill offsets from your board (use `gpioinfo`)
-    DemoGpioCfg gpio_cfg = {
-        .chip_name = "gpiochip0",
-        .led_offsets = { /* LSB..MSB */ 0,1,2,3,4,5,6,7 }, // ví dụ
-        .led_count = 8,
-        .btn0_offset = 8,   // ví dụ BTN0
-        .btn1_offset = 9,   // ví dụ BTN1
-        .leds_active_low = 0,
-        .btns_active_low = 1,  // thường nút kéo-up: pressed=0
-        .debounce_ms = 10
-    };
-    DemoGpio_Start(&gpio_cfg);
+    // DemoGpioCfg gpio_cfg = {
+    //     .chip_name = "gpiochip0",
+    //     .led_offsets = { /* LSB..MSB */ 0,1,2,3,4,5,6,7 }, // ví dụ
+    //     .led_count = 8,
+    //     .btn0_offset = 8,   // ví dụ BTN0
+    //     .btn1_offset = 9,   // ví dụ BTN1
+    //     .leds_active_low = 0,
+    //     .btns_active_low = 1,  // thường nút kéo-up: pressed=0
+    //     .debounce_ms = 10
+    // };
+    // DemoGpio_Start(&gpio_cfg);
+
+    DemoI2cTemp_Start("/dev/i2c-0");
 
     // 4. Let OSAL tasks run indefinitely
     //    In Linux backend, tasks are POSIX threads. We can just sleep forever.
