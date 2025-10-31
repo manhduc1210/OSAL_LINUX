@@ -76,7 +76,20 @@ int main(void) {
         return -1;
     }
 
-    DemoI2cExpander_Start(bus, 0x20);  // typical MCP23008 addr
+    // --- Gọi scan ---
+    uint8_t found[16];
+    int n = HAL_I2cBus_Scan(bus, found, 16);
+
+    if (n == 0) {
+        printf("[I2C SCAN] No devices found on %s\n", bus_cfg.bus_name);
+    } else {
+        printf("[I2C SCAN] Found %d device(s):\n", n);
+        for (int i = 0; i < n; ++i)
+            printf("  - 0x%02X\n", found[i]);
+    }
+
+    HAL_I2cBus_Close(bus);
+    // DemoI2cExpander_Start(bus, 0x20);  // typical MCP23008 addr
     // DemoI2cTemp_Start("/dev/i2c-0");
 
     // 4. Let OSAL tasks run indefinitely
