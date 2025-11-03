@@ -21,7 +21,7 @@ void DemoUart_Start(const char* dev, uint32_t baud, int nb);  // from demo_uart.
 void DemoUart_Stop(void);                                     // stop/cleanup
 void DemoGpio_Start(const DemoGpioCfg* cfg);
 void DemoI2cExpander_Start(HAL_I2cBus* bus, uint8_t addr7);
-void DemoOledSpi_Start(HAL_SpiBus* spi_bus);
+void Demo_Spi_Basic(void);
 
 // === SIGINT handler (Ctrl+C) ===
 static volatile sig_atomic_t g_stop_requested = 0;
@@ -78,7 +78,7 @@ int main(void) {
     //     return -1;
     // }
 
-    // --- Gọi scan ---
+    // // --- Gọi scan ---
     // uint8_t found[16];
     // int n = HAL_I2cBus_Scan(bus, found, 16);
 
@@ -93,28 +93,32 @@ int main(void) {
     // HAL_I2cBus_Close(bus);
 
     // DemoI2cExpander_Start(bus, 0x20);  // typical MCP23008 addr
-    // DemoI2cTemp_Start("/dev/i2c-0");
+    DemoI2cTemp_Start("/dev/i2c-0");
 
-    HAL_SpiStatus st;
-    HAL_SpiConfig spi_cfg = {
-        .dev_name      = "/dev/spidev0.0", // MUST exist after DT fix
-        .mode          = HAL_SPI_MODE0,
-        .max_speed_hz  = 1000000,
-        .bits_per_word = 8,
-        .lsb_first     = 0
-    };
+    // HAL_SpiStatus st;
+    // HAL_SpiConfig spi_cfg = {
+    //     .dev_name      = "/dev/spidev0.0", // MUST exist after DT fix
+    //     .mode          = HAL_SPI_MODE0,
+    //     .max_speed_hz  = 1000000,
+    //     .bits_per_word = 8,
+    //     .lsb_first     = 0
+    // };
 
-    HAL_SpiBus* spi_bus = HAL_Spi_Open(&spi_cfg, &st);
-    if (!spi_bus || st != HAL_SPI_OK) {
-        printf("[APP] SPI open failed (%d)\n", st);
-        return -1;
-    }
+    // HAL_SpiBus* spi_bus = HAL_Spi_Open(&spi_cfg, &st);
+    // if (!spi_bus || st != HAL_SPI_OK) {
+    //     printf("[APP] SPI open failed (%d)\n", st);
+    //     return -1;
+    // }
 
-    DemoOledSpi_Start(spi_bus);
+    // DemoOledSpi_Start(spi_bus);
+    
+    // printf("=== OSAL Linux Demo App (SPI basic) ===\n");
+    // Demo_Spi_Basic();
+
     // 4. Let OSAL tasks run indefinitely
     //    In Linux backend, tasks are POSIX threads. We can just sleep forever.
     // while (!g_stop_requested) {
-    //     OSAL_TaskDelayMs(200);
+    //     OSAL_TaskDelayMs(1000);
     // }
     for (;;) OSAL_TaskDelayMs(1000);
     // printf("\n[APP] Ctrl+C detected. Stopping...\n");

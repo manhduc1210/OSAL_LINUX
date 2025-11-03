@@ -34,7 +34,19 @@ struct HAL_SpiBus {
     uint8_t  bits_per_word;
     uint8_t  lsb_first;
     uint32_t speed_hz;
+
+    /* ---- MOCK backend (when dev_name starts with "mock") ---- */
+    int      is_mock;
+    uint8_t  mock_buf[512];   /* circular buffer for demo */
+    size_t   mock_size;       /* valid bytes in buffer */
+    size_t   mock_rd;         /* read index (0..mock_size-1) */
 };
+
+static int _starts_with(const char* s, const char* p) {
+    if (!s || !p) return 0;
+    while (*p) { if (*s++ != *p++) return 0; }
+    return 1;
+}
 
 /* Helper to apply config via ioctl */
 static HAL_SpiStatus _spi_apply_cfg(struct HAL_SpiBus* bus)
@@ -70,6 +82,38 @@ HAL_SpiBus* HAL_Spi_Open(const HAL_SpiConfig* cfg, HAL_SpiStatus* out_status)
     }
 
     HAL_SpiBus* bus = (HAL_SpiBus*)calloc(1, sizeof(*bus));
+
+    /* MOCK backend: dev_name like "mock" or "mock:seed text" */
+    if (_starts_with(cfg->dev_name, "mock")) {
+        bus->fd            = -1;
+        bus->is_mock       = 1;
+        bus->mode          = (uint8_t)cfg->mode;
+        bus->bits_per_word = cfg->bits_per_word ? cfg->bits_per_word : 8;
+        bus->lsb_first     = cfg->lsb_first;
+        bus->speed_hz      = cfg->max_speed_hz ? cfg->max_speed_hz : 1000000;
+        strncpy(bus->dev_name, cfg->dev_name, sizeof(bus->dev_name)-1);
+
+        /* optional seed: "mock:HELLO" -> preload buffer with "HELLO" */
+        const char* colon = strchr(cfg->dev_name, ':');
+        if (colon && *(colon+1)) {
+            const char* seed = colon + 1;
+            size_t n = strlen(seed);
+            if (n > sizeof(bus->mock_buf)) n = sizeof(bus->mock_buf);
+            memcpy(bus->mock_buf, seed, n);
+            bus->mock_size = n;
+            bus->mock_rd   = 0;
+        } else {
+            bus->mock_size = 0;
+            bus->mock_rd   = 0;
+        }
+
+        OSAL_LOG("[SPI][MOCK] opened %s (mode=%u, bpw=%u, lsb=%u, speed=%u)\r\n",
+                 bus->dev_name, (unsigned)bus->mode, (unsigned)bus->bits_per_word,
+                 (unsigned)bus->lsb_first, (unsigned)bus->speed_hz);
+        if (out_status) *out_status = HAL_SPI_OK;
+        return bus;
+    }
+
     if (!bus) {
         if (out_status) *out_status = HAL_SPI_EBUS;
         return NULL;
@@ -115,6 +159,11 @@ void HAL_Spi_Close(HAL_SpiBus* bus)
         close(bus->fd);
     }
     free(bus);
+
+    if (bus->is_mock) {
+        /* nothing to close */
+        return;
+    }
 }
 
 /* ---------------------------------
@@ -128,6 +177,39 @@ HAL_SpiStatus HAL_Spi_Transfer(HAL_SpiBus* bus,
                                uint8_t*       rx,
                                size_t         len)
 {
+
+    if (bus->is_mock) {
+        /* For mock: if tx present, append to buffer;
+         * if rx present, read from buffer (wrap) or fill 0xFF if empty
+         */
+        if (tx && len) {
+            size_t cap = sizeof(bus->mock_buf);
+            size_t room = cap - bus->mock_size;
+            size_t w = (len < room) ? len : room;
+            /* append to end */
+            memcpy(bus->mock_buf + bus->mock_size, tx, w);
+            bus->mock_size += w;
+            /* if overflow, drop oldest (simple behavior) */
+            if (len > room) {
+                size_t over = len - room;
+                /* shift left by 'over' */
+                memmove(bus->mock_buf, bus->mock_buf + over, bus->mock_size - over);
+                memcpy(bus->mock_buf + (bus->mock_size - over), tx + w, over);
+            }
+        }
+        if (rx && len) {
+            if (bus->mock_size == 0) {
+                memset(rx, 0xFF, len);
+            } else {
+                for (size_t i=0;i<len;i++) {
+                    rx[i] = bus->mock_buf[bus->mock_rd++];
+                    if (bus->mock_rd >= bus->mock_size) bus->mock_rd = 0;
+                }
+            }
+        }
+        return HAL_SPI_OK;
+    }
+
     if (!bus || len == 0) return HAL_SPI_EINVAL;
 
     // We need stable TX buffer even if caller passed NULL.
@@ -257,14 +339,14 @@ HAL_SpiStatus HAL_Spi_GetInfo(HAL_SpiBus* bus, HAL_SpiInfo* out_info)
     uint8_t bpw_rd  = 0;
     uint32_t spd_rd = 0;
 
-    if (ioctl(bus->fd, SPI_IOC_RD_MODE, &mode_rd) < 0) {
+    if (!bus->is_mock) {
+        if (ioctl(bus->fd, SPI_IOC_RD_MODE, &mode_rd) < 0)  mode_rd = bus->mode;
+        if (ioctl(bus->fd, SPI_IOC_RD_BITS_PER_WORD, &bpw_rd) < 0) bpw_rd = bus->bits_per_word;
+        if (ioctl(bus->fd, SPI_IOC_RD_MAX_SPEED_HZ, &spd_rd) < 0) spd_rd = bus->speed_hz;
+    } else {
         mode_rd = bus->mode;
-    }
-    if (ioctl(bus->fd, SPI_IOC_RD_BITS_PER_WORD, &bpw_rd) < 0) {
-        bpw_rd = bus->bits_per_word;
-    }
-    if (ioctl(bus->fd, SPI_IOC_RD_MAX_SPEED_HZ, &spd_rd) < 0) {
-        spd_rd = bus->speed_hz;
+        bpw_rd  = bus->bits_per_word;
+        spd_rd  = bus->speed_hz;
     }
 
     out_info->mode          = mode_rd & 0x3;
