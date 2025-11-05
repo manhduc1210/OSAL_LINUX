@@ -10,8 +10,6 @@
  */
 
 #include "hal_spi.h"
-#include "osal.h"
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,17 +55,17 @@ static HAL_SpiStatus _spi_apply_cfg(struct HAL_SpiBus* bus)
         mode_ioctl |= SPI_LSB_FIRST;
 
     if (ioctl(bus->fd, SPI_IOC_WR_MODE, &mode_ioctl) < 0) {
-        OSAL_LOG("[SPI][LINUX] set MODE fail errno=%d\r\n", errno);
+        printf("[SPI][LINUX] set MODE fail errno=%d\r\n", errno);
         return HAL_SPI_EBUS;
     }
 
     if (ioctl(bus->fd, SPI_IOC_WR_BITS_PER_WORD, &bus->bits_per_word) < 0) {
-        OSAL_LOG("[SPI][LINUX] set BPW fail errno=%d\r\n", errno);
+        printf("[SPI][LINUX] set BPW fail errno=%d\r\n", errno);
         return HAL_SPI_EBUS;
     }
 
     if (ioctl(bus->fd, SPI_IOC_WR_MAX_SPEED_HZ, &bus->speed_hz) < 0) {
-        OSAL_LOG("[SPI][LINUX] set SPEED fail errno=%d\r\n", errno);
+        printf("[SPI][LINUX] set SPEED fail errno=%d\r\n", errno);
         return HAL_SPI_EBUS;
     }
 
@@ -107,7 +105,7 @@ HAL_SpiBus* HAL_Spi_Open(const HAL_SpiConfig* cfg, HAL_SpiStatus* out_status)
             bus->mock_rd   = 0;
         }
 
-        OSAL_LOG("[SPI][MOCK] opened %s (mode=%u, bpw=%u, lsb=%u, speed=%u)\r\n",
+        printf("[SPI][MOCK] opened %s (mode=%u, bpw=%u, lsb=%u, speed=%u)\r\n",
                  bus->dev_name, (unsigned)bus->mode, (unsigned)bus->bits_per_word,
                  (unsigned)bus->lsb_first, (unsigned)bus->speed_hz);
         if (out_status) *out_status = HAL_SPI_OK;
@@ -121,7 +119,7 @@ HAL_SpiBus* HAL_Spi_Open(const HAL_SpiConfig* cfg, HAL_SpiStatus* out_status)
 
     int fd = open(cfg->dev_name, O_RDWR);
     if (fd < 0) {
-        OSAL_LOG("[SPI][LINUX] open %s failed errno=%d\r\n", cfg->dev_name, errno);
+        printf("[SPI][LINUX] open %s failed errno=%d\r\n", cfg->dev_name, errno);
         free(bus);
         if (out_status) *out_status = HAL_SPI_EBUS;
         return NULL;
@@ -142,7 +140,7 @@ HAL_SpiBus* HAL_Spi_Open(const HAL_SpiConfig* cfg, HAL_SpiStatus* out_status)
         return NULL;
     }
 
-    OSAL_LOG("[SPI][LINUX] opened %s mode=%u bpw=%u lsb=%u speed=%uHz\r\n",
+    printf("[SPI][LINUX] opened %s mode=%u bpw=%u lsb=%u speed=%uHz\r\n",
              bus->dev_name,
              (unsigned)bus->mode,
              (unsigned)bus->bits_per_word,
@@ -239,7 +237,7 @@ HAL_SpiStatus HAL_Spi_Transfer(HAL_SpiBus* bus,
     if (tx_buf_alloc) free(tx_buf_alloc);
 
     if (ret < 0) {
-        OSAL_LOG("[SPI][LINUX] Transfer fail errno=%d\r\n", errno);
+        printf("[SPI][LINUX] Transfer fail errno=%d\r\n", errno);
         return HAL_SPI_EIO;
     }
     return HAL_SPI_OK;
@@ -301,7 +299,7 @@ HAL_SpiStatus HAL_Spi_TransferSegments(HAL_SpiBus* bus,
     if (tx1_alloc) free(tx1_alloc);
 
     if (ret < 0) {
-        OSAL_LOG("[SPI][LINUX] Segments fail errno=%d\r\n", errno);
+        printf("[SPI][LINUX] Segments fail errno=%d\r\n", errno);
         return HAL_SPI_EIO;
     }
 
@@ -320,7 +318,7 @@ HAL_SpiStatus HAL_Spi_SetSpeed(HAL_SpiBus* bus, uint32_t hz)
     if (!bus) return HAL_SPI_EINVAL;
     bus->speed_hz = hz;
     if (ioctl(bus->fd, SPI_IOC_WR_MAX_SPEED_HZ, &bus->speed_hz) < 0) {
-        OSAL_LOG("[SPI][LINUX] SetSpeed fail errno=%d\r\n", errno);
+        printf("[SPI][LINUX] SetSpeed fail errno=%d\r\n", errno);
         return HAL_SPI_EBUS;
     }
     return HAL_SPI_OK;
@@ -417,7 +415,7 @@ HAL_SpiStatus HAL_Spi_BurstTransfer(HAL_SpiBus*    bus,
     if (tx_buf_alloc) free(tx_buf_alloc);
 
     if (ret < 0) {
-        OSAL_LOG("[SPI][LINUX] BurstTransfer fail errno=%d\r\n", errno);
+        printf("[SPI][LINUX] BurstTransfer fail errno=%d\r\n", errno);
         return HAL_SPI_EIO;
     }
 

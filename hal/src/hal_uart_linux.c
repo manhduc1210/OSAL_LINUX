@@ -11,8 +11,7 @@
  * The code aims to be simple, robust, and suitable for task-based apps via OSAL.
  */
 #include "hal_uart.h"
-#include "osal.h"
-
+#include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -117,7 +116,7 @@ HAL_Uart* HAL_Uart_Open(const HAL_UartConfig* cfg, HAL_UartStatus* out_status) {
     int fd = open(cfg->device, flags);
     if (fd < 0) {
         if (out_status) *out_status = HAL_UART_EIO;
-        OSAL_LOG("[UART][LINUX] open %s failed errno=%d\r\n", cfg->device, errno);
+        printf("[UART][LINUX] open %s failed errno=%d\r\n", cfg->device, errno);
         return NULL;
     }
 
@@ -133,12 +132,12 @@ HAL_Uart* HAL_Uart_Open(const HAL_UartConfig* cfg, HAL_UartStatus* out_status) {
 
     if (_apply_cfg(fd, cfg) != 0) {
         if (out_status) *out_status = HAL_UART_ECFG;
-        OSAL_LOG("[UART][LINUX] termios set failed\r\n");
+        printf("[UART][LINUX] termios set failed\r\n");
         close(fd); free(h); return NULL;
     }
 
     if (out_status) *out_status = HAL_UART_OK;
-    OSAL_LOG("[UART][LINUX] opened %s baud=%u\r\n", cfg->device, (unsigned)cfg->baud);
+    printf("[UART][LINUX] opened %s baud=%u\r\n", cfg->device, (unsigned)cfg->baud);
     return h;
 }
 

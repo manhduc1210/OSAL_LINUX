@@ -6,12 +6,12 @@
  */
 
 #include "hal_gpio.h"
-#include "osal.h"
-
+#include <stdio.h>
 #include <gpiod.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "hal_gpio_linux_int.h"
 
 struct HAL_GpioChip {
     struct gpiod_chip* chip;
@@ -33,18 +33,18 @@ struct HAL_GpioLine {
 
 /* --- helpers --- */
 
-static uint64_t _timespec_to_ns(const struct timespec* ts) {
+uint64_t _timespec_to_ns(const struct timespec* ts) {
     if (!ts) return 0;
     return ((uint64_t)ts->tv_sec * 1000000000ull) + (uint64_t)ts->tv_nsec;
 }
 
 /* Map logical value to physical considering active low/high */
-static int _logical_to_physical(const HAL_GpioLineConfig* c, int logical) {
+int _logical_to_physical(const HAL_GpioLineConfig* c, int logical) {
     return (c->active == HAL_GPIO_ACTIVE_LOW) ? (!logical) : (logical != 0);
 }
 
 /* Map physical read to logical */
-static int _physical_to_logical(const HAL_GpioLineConfig* c, int physical) {
+int _physical_to_logical(const HAL_GpioLineConfig* c, int physical) {
     int v = physical ? 1 : 0;
     return (c->active == HAL_GPIO_ACTIVE_LOW) ? !v : v;
 }
@@ -70,7 +70,7 @@ static int _resolve_offset_by_name(struct gpiod_chip* chip, const char* name) {
 
 HAL_GpioStatus HAL_GpioChip_Open(const HAL_GpioChipConfig* cfg, HAL_GpioChip** out_chip) {
     if (!cfg || !cfg->chip_name || !cfg->chip_name[0] || !out_chip) {
-        OSAL_LOG("[GPIO][LINUX] invalid chip config (name missing)\r\n");
+        printf("[GPIO][LINUX] invalid chip config (name missing)\r\n");
         return HAL_GPIO_EINVAL;
     }
     HAL_GpioChip* hc = (HAL_GpioChip*)calloc(1, sizeof(*hc));
@@ -78,12 +78,12 @@ HAL_GpioStatus HAL_GpioChip_Open(const HAL_GpioChipConfig* cfg, HAL_GpioChip** o
 
     hc->chip = gpiod_chip_open_by_name(cfg->chip_name);
     if (!hc->chip) {
-        OSAL_LOG("[GPIO][LINUX] gpiod_chip_open_by_name('%s') failed\r\n", cfg->chip_name);
+        printf("[GPIO][LINUX] gpiod_chip_open_by_name('%s') failed\r\n", cfg->chip_name);
         free(hc);
         return HAL_GPIO_EIO;
     }
     strncpy(hc->name, cfg->chip_name, sizeof(hc->name)-1);
-    OSAL_LOG("[GPIO][LINUX] chip opened: %s\r\n", hc->name);
+    printf("[GPIO][LINUX] chip opened: %s\r\n", hc->name);
     *out_chip = hc;
     return HAL_GPIO_OK;
 }
@@ -101,7 +101,7 @@ HAL_GpioStatus HAL_GpioLine_Request(HAL_GpioChip* chip, const HAL_GpioLineConfig
     if (offset < 0 && cfg->name) {
         offset = _resolve_offset_by_name(chip->chip, cfg->name);
         if (offset < 0) {
-            OSAL_LOG("[GPIO][LINUX] line '%s' not found on %s\r\n", cfg->name, chip->name);
+            printf("[GPIO][LINUX] line '%s' not found on %s\r\n", cfg->name, chip->name);
             return HAL_GPIO_ENOENT;
         }
     }

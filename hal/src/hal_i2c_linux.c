@@ -17,8 +17,6 @@
  */
 
 #include "hal_i2c.h"
-#include "osal.h"
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,7 +42,7 @@ struct HAL_I2cBus {
 static HAL_I2cStatus _i2c_set_addr(struct HAL_I2cBus* bus, uint8_t addr7) {
     if (!bus) return HAL_I2C_EINVAL;
     if (ioctl(bus->fd, I2C_SLAVE, addr7) < 0) {
-        OSAL_LOG("[I2C][LINUX] ioctl(I2C_SLAVE,0x%02X) failed errno=%d\r\n",
+        printf("[I2C][LINUX] ioctl(I2C_SLAVE,0x%02X) failed errno=%d\r\n",
                  addr7, errno);
         return HAL_I2C_ENODEV; // often errno=ENODEV or EBUSY if NACK or locked
     }
@@ -70,7 +68,7 @@ HAL_I2cBus* HAL_I2cBus_Open(const HAL_I2cBusConfig* cfg, HAL_I2cStatus* out_stat
 
     int fd = open(cfg->bus_name, O_RDWR);
     if (fd < 0) {
-        OSAL_LOG("[I2C][LINUX] open %s failed errno=%d\r\n", cfg->bus_name, errno);
+        printf("[I2C][LINUX] open %s failed errno=%d\r\n", cfg->bus_name, errno);
         free(bus);
         if (out_status) *out_status = HAL_I2C_EBUS;
         return NULL;
@@ -80,7 +78,7 @@ HAL_I2cBus* HAL_I2cBus_Open(const HAL_I2cBusConfig* cfg, HAL_I2cStatus* out_stat
     bus->speed_hz_hint = cfg->bus_speed_hz;
     strncpy(bus->dev_name, cfg->bus_name, sizeof(bus->dev_name)-1);
 
-    OSAL_LOG("[I2C][LINUX] opened %s (speed hint %u Hz)\r\n",
+    printf("[I2C][LINUX] opened %s (speed hint %u Hz)\r\n",
              bus->dev_name, (unsigned)bus->speed_hz_hint);
 
     if (out_status) *out_status = HAL_I2C_OK;
@@ -163,7 +161,7 @@ HAL_I2cStatus HAL_I2c_Write(HAL_I2cBus* bus,
 
     ssize_t w = write(bus->fd, data_out, len);
     if ((size_t)w != len) {
-        OSAL_LOG("[I2C][LINUX] Write addr=0x%02X len=%u failed (errno=%d wrote=%d)\r\n",
+        printf("[I2C][LINUX] Write addr=0x%02X len=%u failed (errno=%d wrote=%d)\r\n",
                  addr7, (unsigned)len, errno, (int)w);
         return HAL_I2C_EIO;
     }
@@ -181,7 +179,7 @@ HAL_I2cStatus HAL_I2c_Read(HAL_I2cBus* bus,
 
     ssize_t r = read(bus->fd, data_in, len);
     if ((size_t)r != len) {
-        OSAL_LOG("[I2C][LINUX] Read addr=0x%02X len=%u failed (errno=%d read=%d)\r\n",
+        printf("[I2C][LINUX] Read addr=0x%02X len=%u failed (errno=%d read=%d)\r\n",
                  addr7, (unsigned)len, errno, (int)r);
         return HAL_I2C_EIO;
     }
@@ -213,7 +211,7 @@ HAL_I2cStatus HAL_I2c_WriteReg8(HAL_I2cBus* bus,
 
     ssize_t w = write(bus->fd, buf, len + 1);
     if ((size_t)w != (len + 1)) {
-        OSAL_LOG("[I2C][LINUX] WriteReg8 addr=0x%02X reg=0x%02X len=%u failed (errno=%d wrote=%d)\r\n",
+        printf("[I2C][LINUX] WriteReg8 addr=0x%02X reg=0x%02X len=%u failed (errno=%d wrote=%d)\r\n",
                  addr7, reg, (unsigned)len, errno, (int)w);
         return HAL_I2C_EIO;
     }
@@ -237,7 +235,7 @@ HAL_I2cStatus HAL_I2c_ReadReg8(HAL_I2cBus* bus,
     //    START before read(), but for 99% sensors this is fine.)
     ssize_t w = write(bus->fd, &reg, 1);
     if (w != 1) {
-        OSAL_LOG("[I2C][LINUX] ReadReg8(addr=0x%02X) set reg=0x%02X failed errno=%d wrote=%d\r\n",
+        printf("[I2C][LINUX] ReadReg8(addr=0x%02X) set reg=0x%02X failed errno=%d wrote=%d\r\n",
                  addr7, reg, errno, (int)w);
         return HAL_I2C_EIO;
     }
@@ -245,7 +243,7 @@ HAL_I2cStatus HAL_I2c_ReadReg8(HAL_I2cBus* bus,
     // 2) Read data bytes
     ssize_t r = read(bus->fd, data_in, len);
     if ((size_t)r != len) {
-        OSAL_LOG("[I2C][LINUX] ReadReg8 addr=0x%02X reg=0x%02X len=%u readfail errno=%d read=%d\r\n",
+        printf("[I2C][LINUX] ReadReg8 addr=0x%02X reg=0x%02X len=%u readfail errno=%d read=%d\r\n",
                  addr7, reg, (unsigned)len, errno, (int)r);
         return HAL_I2C_EIO;
     }
@@ -280,7 +278,7 @@ HAL_I2cStatus HAL_I2c_WriteReg16(HAL_I2cBus* bus,
 
     ssize_t w = write(bus->fd, buf, len + 2);
     if ((size_t)w != (len + 2)) {
-        OSAL_LOG("[I2C][LINUX] WriteReg16 addr=0x%02X reg16=0x%04X len=%u failed errno=%d wrote=%d\r\n",
+        printf("[I2C][LINUX] WriteReg16 addr=0x%02X reg16=0x%04X len=%u failed errno=%d wrote=%d\r\n",
                  addr7, reg16, (unsigned)len, errno, (int)w);
         return HAL_I2C_EIO;
     }
@@ -306,7 +304,7 @@ HAL_I2cStatus HAL_I2c_ReadReg16(HAL_I2cBus* bus,
     // write 16-bit register pointer
     ssize_t w = write(bus->fd, addrbuf, 2);
     if (w != 2) {
-        OSAL_LOG("[I2C][LINUX] ReadReg16 set reg16=0x%04X failed errno=%d wrote=%d\r\n",
+        printf("[I2C][LINUX] ReadReg16 set reg16=0x%04X failed errno=%d wrote=%d\r\n",
                  reg16, errno, (int)w);
         return HAL_I2C_EIO;
     }
@@ -314,7 +312,7 @@ HAL_I2cStatus HAL_I2c_ReadReg16(HAL_I2cBus* bus,
     // read response
     ssize_t r = read(bus->fd, data_in, len);
     if ((size_t)r != len) {
-        OSAL_LOG("[I2C][LINUX] ReadReg16 addr=0x%02X reg16=0x%04X len=%u readfail errno=%d read=%d\r\n",
+        printf("[I2C][LINUX] ReadReg16 addr=0x%02X reg16=0x%04X len=%u readfail errno=%d read=%d\r\n",
                  addr7, reg16, (unsigned)len, errno, (int)r);
         return HAL_I2C_EIO;
     }
@@ -360,7 +358,7 @@ HAL_I2cStatus HAL_I2c_BurstTransfer(HAL_I2cBus* bus,
     if (tx_buf && tx_len > 0) {
         ssize_t w = write(bus->fd, tx_buf, tx_len);
         if ((size_t)w != tx_len) {
-            OSAL_LOG("[I2C][LINUX] BurstTransfer write addr=0x%02X tx_len=%u failed errno=%d wrote=%d\r\n",
+            printf("[I2C][LINUX] BurstTransfer write addr=0x%02X tx_len=%u failed errno=%d wrote=%d\r\n",
                      addr7, (unsigned)tx_len, errno, (int)w);
             return HAL_I2C_EIO;
         }
@@ -369,7 +367,7 @@ HAL_I2cStatus HAL_I2c_BurstTransfer(HAL_I2cBus* bus,
     if (rx_buf && rx_len > 0) {
         ssize_t r = read(bus->fd, rx_buf, rx_len);
         if ((size_t)r != rx_len) {
-            OSAL_LOG("[I2C][LINUX] BurstTransfer read addr=0x%02X rx_len=%u failed errno=%d read=%d\r\n",
+            printf("[I2C][LINUX] BurstTransfer read addr=0x%02X rx_len=%u failed errno=%d read=%d\r\n",
                      addr7, (unsigned)rx_len, errno, (int)r);
             return HAL_I2C_EIO;
         }

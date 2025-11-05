@@ -1,7 +1,12 @@
 # Ignore build output and temporary folders
 build/
 out/
-
+coverage_html/
+*.gcda
+*.gcno
+test_hal
+test_hw
+test_logic
 # Ignore compiled object files, binaries, libraries
 *.o
 *.a
