@@ -11,7 +11,6 @@
  * FreeRTOS, bare-metal), create corresponding backend files and keep this API.
  */
 #pragma once
-// #include "osal_types.h"
 #include <stddef.h>
 #include <stdint.h>
 
