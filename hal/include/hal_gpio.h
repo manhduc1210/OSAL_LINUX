@@ -21,10 +21,10 @@ typedef struct HAL_GpioLine HAL_GpioLine;
 
 typedef enum {
     HAL_GPIO_OK = 0,
-    HAL_GPIO_EINVAL,
-    HAL_GPIO_EIO,
-    HAL_GPIO_ENOSUP,
-    HAL_GPIO_ENOENT
+    HAL_GPIO_EINVAL = 1,
+    HAL_GPIO_EIO = 2,
+    HAL_GPIO_ENOSUP = 3,
+    HAL_GPIO_ENOENT = 4
 } HAL_GpioStatus;
 
 typedef enum { HAL_GPIO_DIR_IN = 0, HAL_GPIO_DIR_OUT = 1 } HAL_GpioDir;

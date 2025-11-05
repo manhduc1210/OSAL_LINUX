@@ -49,7 +49,7 @@ OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 # =========================
 # Default
 # =========================
-all: $(TEST_LOGIC_BIN)
+all: $(TEST_LOGIC_BIN) $(TEST_HW_BIN)
 
 # =========================
 # Build logic test
