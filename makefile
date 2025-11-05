@@ -1,15 +1,16 @@
 CC ?= $(CROSS_COMPILE)gcc
-SRC_DIRS := hal/src unity/src
-INC_DIRS := hal/include unity/include
+SRC_DIRS := hal/src unity/src osal/src
+INC_DIRS := hal/include unity/include osal/include
 OBJ_DIR  := out
 # TEST_DIR  := src_unit_test/auto
 # Test files
 TEST_LOGIC_SRC := src_unit_test/auto/test_hal_gpio_linux_logic.c
 TEST_HW_SRC    := src_unit_test/manual/test_hal_gpio_linux_hw.c
-
+TEST_OSAL_SRC  := src_unit_test/osal/test_osal_task_linux.c
 # Binary output
 TEST_LOGIC_BIN := test_logic
 TEST_HW_BIN    := test_hw
+TEST_OSAL_BIN  := test_osal
 
 # libgpiod flags (ưu tiên pkg-config của SDK; nếu không có thì fallback -I/-L)
 GPIOD_CFLAGS := $(shell pkg-config --cflags gpiod 2>/dev/null)
@@ -49,7 +50,7 @@ OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 # =========================
 # Default
 # =========================
-all: $(TEST_LOGIC_BIN) $(TEST_HW_BIN)
+all: $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN)
 
 # =========================
 # Build logic test
@@ -62,6 +63,13 @@ $(TEST_LOGIC_BIN): $(OBJS) $(TEST_LOGIC_SRC)
 # Build HW test
 # =========================
 $(TEST_HW_BIN): $(OBJS) $(TEST_HW_SRC)
+	@echo "🔧 Building $@ ..."
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# =========================
+# Build OSAL test
+# =========================
+$(TEST_OSAL_BIN): $(OBJS) $(TEST_OSAL_SRC)
 	@echo "🔧 Building $@ ..."
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
@@ -84,7 +92,11 @@ test-hw: $(TEST_HW_BIN)
 	@echo "🚀 Running HW test..."
 	./$(TEST_HW_BIN) || true
 
-test-all: test-logic test-hw
+test-osal: $(TEST_OSAL_BIN)
+	@echo "🚀 Running OSAL test..."
+	./$(TEST_OSAL_BIN) || true
+
+test-all: test-logic test-hw test-osal
 
 # =========================
 # Coverage
@@ -101,7 +113,7 @@ coverage: test-all
 # =========================
 clean:
 	@echo "🧹 Cleaning ..."
-	rm -rf $(OBJ_DIR) $(TEST_LOGIC_BIN) $(TEST_HW_BIN)
+	rm -rf $(OBJ_DIR) $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN)
 	rm -f *.gcno *.gcda *.info
 	rm -rf coverage_html
 
