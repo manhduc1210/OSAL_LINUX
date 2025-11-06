@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <stdarg.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 /* ---------------------------------------------------------
  * Forward declare the functions from hal_i2c_linux.c
@@ -67,53 +70,96 @@ static void fake_reset(void)
     g_fake.read_ret      = 1;   // default: read 1 byte OK
     g_fake.write_ret     = 1;   // default: write 1 byte OK
 }
-
-/* ----------- mocked functions ------------ */
-int open(const char *pathname, int flags)
+/* ---------------------------------------------------------
+ * Real syscalls để không bị đệ quy khi gcov ghi file
+ * --------------------------------------------------------- */
+static int real_open3(const char *pathname, int flags, mode_t mode)
 {
-    (void)pathname;
-    (void)flags;
-    if (g_fake.open_ret_fd < 0) {
-        errno = g_fake.open_fail_errno ? g_fake.open_fail_errno : ENOENT;
+    // dùng openat để gọi thẳng syscall
+    return syscall(SYS_openat, AT_FDCWD, pathname, flags, mode);
+}
+
+static ssize_t real_write(int fd, const void *buf, size_t count)
+{
+    return syscall(SYS_write, fd, buf, count);
+}
+
+static ssize_t real_read(int fd, void *buf, size_t count)
+{
+    return syscall(SYS_read, fd, buf, count);
+}
+
+static int real_close(int fd)
+{
+    return syscall(SYS_close, fd);
+}
+
+/* ---------------------------------------------------------
+ * Mocked functions
+ * --------------------------------------------------------- */
+
+/* chỉ mock nếu mở /dev/i2c-*; còn lại gọi real để gcov còn ghi .gcda */
+int open(const char *pathname, int flags, ...)
+{
+    if (strncmp(pathname, "/dev/i2c", 8) == 0) {
+        if (g_fake.open_ret_fd < 0) {
+            errno = g_fake.open_fail_errno ? g_fake.open_fail_errno : ENOENT;
+        }
+        return g_fake.open_ret_fd;
     }
-    return g_fake.open_ret_fd;
+
+    // file bình thường → gọi real
+    mode_t mode = 0;
+    if (flags & O_CREAT) {
+        va_list ap;
+        va_start(ap, flags);
+        mode = (mode_t)va_arg(ap, int);
+        va_end(ap);
+    }
+    return real_open3(pathname, flags, mode);
 }
 
 int close(int fd)
 {
-    (void)fd;
-    g_fake.close_called++;
-    return 0;
+    if (fd == g_fake.open_ret_fd) {
+        g_fake.close_called++;
+        return 0;
+    }
+    return real_close(fd);
+}
+
+/* nếu fd là fd I2C giả thì mock, ngược lại ghi thật (cho gcov) */
+ssize_t write(int fd, const void *buf, size_t count)
+{
+    if (fd == g_fake.open_ret_fd) {
+        if (g_fake.write_ret < 0) {
+            errno = g_fake.write_fail_errno ? g_fake.write_fail_errno : EIO;
+            return -1;
+        }
+        if (count > sizeof(g_fake.write_last)) count = sizeof(g_fake.write_last);
+        memcpy(g_fake.write_last, buf, count);
+        g_fake.write_last_len = count;
+        return g_fake.write_ret;
+    }
+    return real_write(fd, buf, count);
 }
 
 ssize_t read(int fd, void *buf, size_t count)
 {
-    (void)fd;
-    if (g_fake.read_ret < 0) {
-        errno = g_fake.read_fail_errno ? g_fake.read_fail_errno : EIO;
-        return -1;
+    if (fd == g_fake.open_ret_fd) {
+        if (g_fake.read_ret < 0) {
+            errno = g_fake.read_fail_errno ? g_fake.read_fail_errno : EIO;
+            return -1;
+        }
+        size_t n = (size_t)g_fake.read_ret;
+        if (n > count) n = count;
+        memcpy(buf, g_fake.read_buf, n);
+        return (ssize_t)n;
     }
-    /* copy fake data */
-    size_t n = (size_t)g_fake.read_ret;
-    if (n > count) n = count;
-    memcpy(buf, g_fake.read_buf, n);
-    return (ssize_t)n;
+    return real_read(fd, buf, count);
 }
 
-ssize_t write(int fd, const void *buf, size_t count)
-{
-    (void)fd;
-    if (g_fake.write_ret < 0) {
-        errno = g_fake.write_fail_errno ? g_fake.write_fail_errno : EIO;
-        return -1;
-    }
-    /* capture last written payload for inspection */
-    if (count > sizeof(g_fake.write_last)) count = sizeof(g_fake.write_last);
-    memcpy(g_fake.write_last, buf, count);
-    g_fake.write_last_len = count;
-    return g_fake.write_ret;
-}
-
+/* ioctl thì mock luôn vì nó là “đặt địa chỉ slave” */
 int ioctl(int fd, unsigned long request, ...)
 {
     (void)fd;
