@@ -338,7 +338,7 @@ HAL_SpiStatus HAL_Spi_BurstTransfer(HAL_SpiBus*    bus,
      */
     xfer.cs_change     = cs_hold ? 1 : 0;
 
-    int ret = hal_spi_port_ioctl(bus->fd, SPI_IOC_MESSAGE(1), &xfer);
+    int ret = hal_spi_port_ioctl(bus->fd, SPI_IOC_MESSAGE(2), &xfer);
     if (tx_buf_alloc) free(tx_buf_alloc);
 
     if (ret < 0) {

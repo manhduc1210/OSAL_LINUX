@@ -61,6 +61,8 @@ void test_spi_read_only(void)
 {
     uint8_t rx[5] = {0};
     HAL_SpiStatus st = HAL_Spi_Read(s_bus, rx, sizeof(rx));
+    // printf("[Debug]test_spi_read_only::status = %s\r\n",st);
+    // printf("[Debug]test_spi_read_only::rx = %s\r\n",rx);
     TEST_ASSERT_EQUAL_INT(HAL_SPI_OK, st);
     TEST_ASSERT_EQUAL_UINT8('H', rx[0]);
 }
@@ -71,6 +73,9 @@ void test_spi_full_duplex(void)
     uint8_t tx[3] = {0xAA, 0xBB, 0xCC};
     uint8_t rx[3] = {0};
     HAL_SpiStatus st = HAL_Spi_Transfer(s_bus, tx, rx, sizeof(tx));
+    // printf("[Debug]test_spi_full_duplex::status = %s\r\n",st);
+    // printf("[Debug]test_spi_full_duplex::rx = %s\r\n",rx);
+    // printf("[Debug]test_spi_full_duplex::tx = %s\r\n",tx);
     TEST_ASSERT_EQUAL_INT(HAL_SPI_OK, st);
     /* our fake copies from buffer ("HelloMock"), so first char is 'H' */
     TEST_ASSERT_EQUAL_UINT8('H', rx[0]);
@@ -173,10 +178,19 @@ void test_spi_transfer_segments_should_fail(void)
 /* --------------------------------------------------------------------------
  * SetSpeed: our fake ioctl will not update speed, so call should fail.
  * -------------------------------------------------------------------------- */
-void test_spi_set_speed_should_fail(void)
+void test_spi_set_speed_update(void)
 {
-    HAL_SpiStatus st = HAL_Spi_SetSpeed(s_bus, 2000000);  // 2 MHz
-    TEST_ASSERT_EQUAL_INT(HAL_SPI_EIO, st);
+    uint32_t new_speed = 2000000;
+    HAL_SpiStatus st = HAL_Spi_SetSpeed(s_bus, new_speed);  // 2 MHz
+    TEST_ASSERT_EQUAL_INT(HAL_SPI_OK, st);
+
+    HAL_SpiInfo info;
+    st = HAL_Spi_GetInfo(s_bus, &info);
+    TEST_ASSERT_EQUAL_INT(HAL_SPI_OK, st);
+
+    TEST_ASSERT_EQUAL_UINT32(new_speed, info.max_speed_hz);
+
+    printf("[TEST DEBUG] Speed updated -> %u Hz\n", info.max_speed_hz);
 }
 
 /* --------------------------------------------------------------------------
@@ -226,7 +240,7 @@ int main(void)
     RUN_TEST(test_spi_get_info);
     RUN_TEST(test_spi_burst_should_fail);
     RUN_TEST(test_spi_transfer_segments_should_fail);
-    RUN_TEST(test_spi_set_speed_should_fail);
+    RUN_TEST(test_spi_set_speed_update);
     RUN_TEST(test_spi_close_null_ok);
     RUN_TEST(test_spi_close_valid_ok);
 
