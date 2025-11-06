@@ -74,6 +74,7 @@ typedef struct {
     uint8_t  mode;            ///< 0..3
     uint8_t  bits_per_word;   ///< e.g. 8
     uint8_t  lsb_first;       ///< 0=MSB first
+    uint32_t max_speed_hz;
 } HAL_SpiInfo;
 
 /* ---------------------------------

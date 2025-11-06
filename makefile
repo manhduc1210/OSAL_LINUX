@@ -8,6 +8,7 @@ TEST_LOGIC_SRC := src_unit_test/auto/test_hal_gpio_linux_logic.c
 TEST_HW_SRC    := src_unit_test/manual/test_hal_gpio_linux_hw.c
 TEST_UART_SRC  := src_unit_test/manual/test_hal_uart_linux.c
 TEST_I2C_SRC   := src_unit_test/manual/test_hal_i2c_linux.c
+TEST_SPI_SRC   := src_unit_test/manual/test_hal_spi_linux.c
 
 TEST_OSAL_SRC  := src_unit_test/osal/test_osal_task_linux.c
 
@@ -16,6 +17,7 @@ TEST_LOGIC_BIN := test_logic
 TEST_HW_BIN    := test_hw
 TEST_UART_BIN  := test_uart
 TEST_I2C_BIN   := test_i2c
+TEST_SPI_BIN   := test_spi
 TEST_OSAL_BIN  := test_osal
 
 # libgpiod flags (ưu tiên pkg-config của SDK; nếu không có thì fallback -I/-L)
@@ -58,7 +60,7 @@ OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 # =========================
 # Default
 # =========================
-all: $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN)
+all: $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN) $(TEST_SPI_BIN)
 
 # =========================
 # Build logic test
@@ -78,6 +80,13 @@ $(TEST_UART_BIN): $(OBJS) $(TEST_UART_SRC)
 # Build I2C test
 # =========================
 $(TEST_I2C_BIN): $(OBJS) $(TEST_I2C_SRC)
+	@echo "🔧 Building $@ ..."
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# =========================
+# Build I2C test
+# =========================
+$(TEST_SPI_BIN): $(OBJS) $(TEST_SPI_SRC)
 	@echo "🔧 Building $@ ..."
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
@@ -119,14 +128,18 @@ test-uart: $(TEST_UART_BIN)
 	./$(TEST_UART_BIN) || true
 
 test-i2c: $(TEST_I2C_BIN)
-	@echo "🚀 Running UART test..."
+	@echo "🚀 Running I2C test..."
 	./$(TEST_I2C_BIN) || true
+
+test-spi: $(TEST_SPI_BIN)
+	@echo "🚀 Running SPI test..."
+	./$(TEST_SPI_BIN) || true
 
 test-osal: $(TEST_OSAL_BIN)
 	@echo "🚀 Running OSAL test..."
 	./$(TEST_OSAL_BIN) || true
 
-test-all: test-logic test-hw test-osal test-i2c
+test-all: test-logic test-hw test-osal test-i2c test-spi
 
 # =========================
 # Coverage
@@ -143,7 +156,7 @@ coverage: test-all
 # =========================
 clean:
 	@echo "🧹 Cleaning ..."
-	rm -rf $(OBJ_DIR) $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN)
+	rm -rf $(OBJ_DIR) $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN) $(TEST_SPI_BIN)
 	rm -f *.gcno *.gcda *.info
 	rm -rf coverage_html
 
