@@ -85,9 +85,6 @@ int hal_spi_port_ioctl(int fd, unsigned long req, void* arg)
 
         size_t len = x->len;
 
-        /* KHÔNG copy TX vào s_buf nữa — giữ nguyên "HelloMock" */
-        /* chỉ copy từ s_buf ra RX để test đọc */
-
         if (rx && len) {
             for (size_t i = 0; i < len; i++) {
                 rx[i] = s_buf[i % s_buf_len];

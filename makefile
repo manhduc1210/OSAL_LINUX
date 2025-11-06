@@ -4,8 +4,7 @@ INC_DIRS := hal/include unity/include osal/include
 OBJ_DIR  := out
 # TEST_DIR  := src_unit_test/auto
 # Test files
-TEST_LOGIC_SRC := src_unit_test/auto/test_hal_gpio_linux_logic.c
-TEST_HW_SRC    := src_unit_test/manual/test_hal_gpio_linux_hw.c
+TEST_GPIO_SRC  := src_unit_test/manual/test_hal_gpio_linux.c
 TEST_UART_SRC  := src_unit_test/manual/test_hal_uart_linux.c
 TEST_I2C_SRC   := src_unit_test/manual/test_hal_i2c_linux.c
 TEST_SPI_SRC   := src_unit_test/manual/test_hal_spi_linux.c
@@ -13,8 +12,7 @@ TEST_SPI_SRC   := src_unit_test/manual/test_hal_spi_linux.c
 TEST_OSAL_SRC  := src_unit_test/osal/test_osal_task_linux.c
 
 # Binary output
-TEST_LOGIC_BIN := test_logic
-TEST_HW_BIN    := test_hw
+TEST_GPIO_BIN  := test_gpio
 TEST_UART_BIN  := test_uart
 TEST_I2C_BIN   := test_i2c
 TEST_SPI_BIN   := test_spi
@@ -60,14 +58,7 @@ OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 # =========================
 # Default
 # =========================
-all: $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN) $(TEST_SPI_BIN)
-
-# =========================
-# Build logic test
-# =========================
-$(TEST_LOGIC_BIN): $(OBJS) $(TEST_LOGIC_SRC)
-	@echo "🔧 Building $@ ..."
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+all: $(TEST_GPIO_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN) $(TEST_SPI_BIN)
 
 # =========================
 # Build UART test
@@ -84,16 +75,16 @@ $(TEST_I2C_BIN): $(OBJS) $(TEST_I2C_SRC)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # =========================
-# Build I2C test
+# Build SPI test
 # =========================
 $(TEST_SPI_BIN): $(OBJS) $(TEST_SPI_SRC)
 	@echo "🔧 Building $@ ..."
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # =========================
-# Build HW test
+# Build GPIO test
 # =========================
-$(TEST_HW_BIN): $(OBJS) $(TEST_HW_SRC)
+$(TEST_GPIO_BIN): $(OBJS) $(TEST_GPIO_SRC)
 	@echo "🔧 Building $@ ..."
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
@@ -115,13 +106,10 @@ $(OBJ_DIR)/%.o: %.c
 # =========================
 # Run tests
 # =========================
-test-logic: $(TEST_LOGIC_BIN)
-	@echo "🚀 Running logic test..."
-	./$(TEST_LOGIC_BIN)
 
-test-hw: $(TEST_HW_BIN)
-	@echo "🚀 Running HW test..."
-	./$(TEST_HW_BIN) || true
+test-gpio: $(TEST_GPIO_BIN)
+	@echo "🚀 Running GPIO test..."
+	./$(TEST_GPIO_BIN) || true
 
 test-uart: $(TEST_UART_BIN)
 	@echo "🚀 Running UART test..."
@@ -139,7 +127,7 @@ test-osal: $(TEST_OSAL_BIN)
 	@echo "🚀 Running OSAL test..."
 	./$(TEST_OSAL_BIN) || true
 
-test-all: test-logic test-hw test-osal test-i2c test-spi
+test-all: test-logic test-gpio test-osal test-i2c test-spi
 
 # =========================
 # Coverage
@@ -156,8 +144,8 @@ coverage: test-all
 # =========================
 clean:
 	@echo "🧹 Cleaning ..."
-	rm -rf $(OBJ_DIR) $(TEST_LOGIC_BIN) $(TEST_HW_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN) $(TEST_SPI_BIN)
+	rm -rf $(OBJ_DIR) $(TEST_GPIO_BIN) $(TEST_OSAL_BIN) $(TEST_UART_BIN) $(TEST_I2C_BIN) $(TEST_SPI_BIN)
 	rm -f *.gcno *.gcda *.info
 	rm -rf coverage_html
 
-.PHONY: all clean test-logic test-hw test-all coverage
+.PHONY: all clean test-logic test-gpio test-all coverage
