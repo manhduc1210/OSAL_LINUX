@@ -74,10 +74,10 @@ int hal_spi_port_ioctl(int fd, unsigned long req, void* arg)
     if (is_spi_message_ioctl(req)) {
         struct spi_ioc_transfer* x = (struct spi_ioc_transfer*)arg;
 
-        // printf("[FAKE DEBUG] SPI_IOC_MESSAGE detected!\n");
-        // printf("  xfer.len = %u\n", (unsigned)x->len);
-        // printf("  xfer.tx_buf = 0x%lX\n", (unsigned long)x->tx_buf);
-        // printf("  xfer.rx_buf = 0x%lX\n", (unsigned long)x->rx_buf);
+        printf("[FAKE DEBUG] SPI_IOC_MESSAGE detected!\n");
+        printf("  xfer.len = %u\n", (unsigned)x->len);
+        printf("  xfer.tx_buf = 0x%lX\n", (unsigned long)x->tx_buf);
+        printf("  xfer.rx_buf = 0x%lX\n", (unsigned long)x->rx_buf);
 
         uint8_t* rx = NULL;
         if (x->rx_buf)
@@ -92,8 +92,8 @@ int hal_spi_port_ioctl(int fd, unsigned long req, void* arg)
             for (size_t i = 0; i < len; i++) {
                 rx[i] = s_buf[i % s_buf_len];
             }
-            // printf("[FAKE DEBUG] Copied %zu bytes from fake buffer\n", len);
-            // printf("[FAKE DEBUG] First RX byte = %u ('%c')\n", rx[0], rx[0]);
+            printf("[FAKE DEBUG] Copied %zu bytes from fake buffer\n", len);
+            printf("[FAKE DEBUG] First RX byte = %u ('%c')\n", rx[0], rx[0]);
         }
 
         return (int)len;
