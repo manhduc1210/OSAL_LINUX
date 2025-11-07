@@ -1,4 +1,3 @@
-// tests/fake_gpiod_min.c
 // This file overrides only the gpiod symbols that our HAL actually calls.
 // Build this file into unit-test target instead of linking real -lgpiod.
 

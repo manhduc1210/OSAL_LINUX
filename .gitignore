@@ -7,7 +7,7 @@ coverage_html/
 test_hal
 test_hw
 test_logic
-report/
+# report/
 
 # Ignore compiled object files, binaries, libraries
 *.o
